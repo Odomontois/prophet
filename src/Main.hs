@@ -1,92 +1,114 @@
 
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns, RecordWildCards #-}
 
 module Main where
 
-import Data.Array.IArray
-import Data.Array.Unboxed
-import Data.List
-import Data.Ord
 import System.Environment
 import Data.Foldable
+import Data.Monoid
+import qualified Data.Set as Set
+import Data.Set (Set)
+import Data.Function
+import Data.Ord
+import Data.Tree
+import Data.List
+import Data.Maybe
 
-import Generator
+data Choice = Break | Keep deriving (Show, Eq, Ord, Enum, Bounded)
 
-data Choice = Break | Keep deriving (Show, Ix, Eq, Ord, Enum, Bounded)
+type Game = Choice -> Choice -> Points
 
-data Strategy i = Strategy (UArray i Bool) (Strategy (i, Choice)) | EndStrategy
+data Points = Points {
+  server::Integer,
+  client::Integer
+} deriving (Show, Eq, Ord)
 
-type Game = Choice -> Choice -> (Integer, Integer)
+data Strategy = Strategy {
+  choice::Choice,
+  points::Points,
+  keepStrat::Maybe Strategy,
+  breakStrat::Maybe Strategy,
+  clientStrat::[Choice]
+} deriving Show
 
-ssize::Ix i=>Strategy i->Int
-ssize EndStrategy = 0
-ssize (Strategy _ next) = 1 + ssize next
+with = (.) . (.)
 
-(+.)::(Num a, Num b)=>(a,b)->(a,b)->(a,b)
-(x, y) +. (a, b) = (x + a, b + y)
+instance Eq Strategy where
+  (==) = ((== EQ) .)  . compare
 
-points::[Choice]->Strategy ()->Game->(Integer, Integer)
-points choices strategy game = go choices strategy () where
-  go::(Ix i)=>[Choice]->Strategy i->i->(Integer, Integer)
-  go [] _ _ = (0,0)
-  go _ EndStrategy _ = (0,0)
-  go (choice: rest) (Strategy arr nextStrat) history = that +. next where
-    that = game serv choice
-    next = go rest nextStrat (history, choice)
-    serv = toEnum . fromEnum $ arr ! history
+clientCompare, serverCompare :: Points -> Points -> Ordering
+clientCompare = comparing client <> comparing (Down . server)
+serverCompare = comparing server <> comparing (Down . client)
 
-clientSelect::Strategy ()->Game->((Integer, Integer), [Choice])
-clientSelect strat game = let
-  selections = do
-      choices <- variations $ ssize strat
-      return (points choices strat game, choices)
-  clientPoints ((srv, clnt), _choice) = (clnt, - srv)
-  in maximumBy (comparing clientPoints) selections
+instance Ord Strategy where
+  compare =  comparing (client . points) <>
+             comparing (server . points) <>
+             comparing choice
 
-genStrategies::forall n.(Integral n, Eq n)=>n->IGen Bool (Strategy ())
-genStrategies = genStratLevel () () 0
+instance Monoid Points where
+  mempty = Points 0 0
+  (Points c1 s1) `mappend` (Points c2 s2) = Points (c1 + c2) (s1 + s2)
 
-genStratLevel::forall n i.(Integral n, Eq n, Ix i)=>i->i->n->n->IGen Bool (Strategy i)
-genStratLevel _ _ _ 0 = Single EndStrategy
-genStratLevel from to k n = do
-  let size = (2 ^ k)::n
-  var <- variations size
-  let arr = listArray (from, to) $ toList var
-  next <- genStratLevel (from, Break) (to, Keep) (k + 1) (n - 1)
-  return $ Strategy arr next
+strategy::Maybe Strategy->Maybe Strategy->Choice->Game->Strategy
+strategy
+  keepStrat
+  breakStrat
+  choice
+  game = let
+    keepPoints   = game choice Keep  <> maybe mempty points keepStrat
+    breakPoints  = game choice Break <> maybe mempty points breakStrat
+    (cliCh, maybe [] clientStrat -> history, pts) =
+      case clientCompare keepPoints breakPoints of
+        GT -> (Keep,  keepStrat,  keepPoints)
+        _  -> (Break, breakStrat, breakPoints)
+    in Strategy{points = pts, clientStrat = cliCh : history, ..}
 
-serverSelect::Game->Integer->(Integer, Integer, Strategy (), [Choice])
-serverSelect game n = (server, client, strat, choice) where
-  serverPoints = fst. fst . fst
-  best = maximumBy (comparing serverPoints) $ do
-    strategy <- genStrategies n
-    return (clientSelect strategy game, strategy)
-  (((server, client), choice), strat) = best
+
+initial :: Game -> Set Strategy
+initial game = Set.fromList [start Keep, start Break] where
+  start = flip (strategy Nothing Nothing) game
+
+levels::(Enum a, Bounded a)=>[a]
+levels = [minBound..maxBound]
+
+next :: Game -> Set Strategy -> Set Strategy
+next game set = Set.fromList $ do
+  keep <- toList set
+  break <- toList set
+  choice <- [minBound..maxBound]
+  return $ strategy (Just keep) (Just break) choice game
+
+serverChoice :: Game -> Int -> Strategy
+serverChoice game count = let
+  ini = initial game
+  nxt = next game
+  ops = replicate (count - 1) $ Endo nxt
+  run = foldr1 mappend ops
+  res = appEndo run ini
+  cmp = serverCompare `on` points
+  in maximumBy cmp res
 
 prison::Game
-prison Break Break = ( 0,  0)
-prison Break Keep  = ( 2, -1)
-prison Keep  Break = (-1,  2)
-prison Keep  Keep  = ( 1,  1)
+prison Break Break = Points   0   0
+prison Break Keep  = Points   2 (-1)
+prison Keep  Break = Points (-1)  2
+prison Keep  Keep  = Points   1   1
 
 main :: IO ()
 main = do
-  [count] <- fmap (map read) getArgs :: IO [Integer]
-  print $ serverSelect prison count
+  [count] <- fmap (map read) getArgs
+  let strat@Strategy{..} = serverChoice prison count
+  putStr "server gains "
+  print $ server points
+  putStr "client gains "
+  print $ client points
+  putStr "client strategy: "
+  putStrLn $ intercalate " -> " $ map show clientStrat
+  putStrLn "server strategy:"
+  putStr $ drawStrat strat
 
-class ShowHistory a where
-  showHistory::a -> [String]
-  showAssocs::Show b=>[(a, b)] -> String
-  showAssocs as =  intercalate " ; " $ do
-    (key, val) <- as
-    let skey = intercalate "," $ showHistory key
-    return (skey ++ "->" ++ show val)
-
-instance ShowHistory () where showHistory _ = []
-instance (ShowHistory a, Show b) => ShowHistory (a,b) where
-  showHistory (a, b) = showHistory a ++ [show b]
-
-instance (Show i, Ix i, ShowHistory i)=> Show (Strategy i) where
-  show EndStrategy = ""
-  show (Strategy arr next) = "{" ++ that ++ "}" ++ show next where
-    that = showAssocs $ assocs arr
+drawStrat = drawTree . go "at first" where
+  go prefix Strategy{..} = Node (prefix ++ ": " ++ show choice) $ catMaybes [
+      go "if client keeping"   <$> keepStrat,
+      go "if client breaking"  <$> breakStrat
+    ]
