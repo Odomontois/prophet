@@ -3,12 +3,15 @@
 module Generator where
 
 import Control.Monad
+import Iterate
 
 data Generator t a b where
   Single::b->Generator t a b
   Layer::Foldable t=>t a->(a->Generator t a b)->Generator t a b
 
 type LGen = Generator []
+
+type IGen a = Generator (Iterate a) a
 
 gen::Foldable t=>t a->Generator t a a
 gen = flip Layer Single
@@ -35,9 +38,9 @@ instance Foldable t => Foldable (Generator t a) where
   foldMap f (Single x) = f x
   foldMap f (Layer els make) = foldMap (foldMap f.make) els
 
-variations :: (Bounded a, Enum a, Num n, Eq n)=>n->LGen [a] [a]
+variations :: (Bounded a, Enum a, Num n, Eq n, Eq a)=>n->IGen a [a]
 variations 0 = Single []
 variations n = do
-  [i] <- gen $ return <$> [minBound..maxBound]
+  i <- gen boundIter
   v <- variations (n - 1)
   return (i:v)

@@ -43,10 +43,10 @@ clientSelect strat game = let
   clientPoints ((srv, clnt), _choice) = (clnt, - srv)
   in maximumBy (comparing clientPoints) selections
 
-genStrategies::forall n.(Integral n, Eq n)=>n->LGen [Bool] (Strategy ())
+genStrategies::forall n.(Integral n, Eq n)=>n->IGen Bool (Strategy ())
 genStrategies = genStratLevel () () 0
 
-genStratLevel::forall n i.(Integral n, Eq n, Ix i)=>i->i->n->n->LGen [Bool] (Strategy i)
+genStratLevel::forall n i.(Integral n, Eq n, Ix i)=>i->i->n->n->IGen Bool (Strategy i)
 genStratLevel _ _ _ 0 = Single EndStrategy
 genStratLevel from to k n = do
   let size = (2 ^ k)::n
