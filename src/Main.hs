@@ -1,5 +1,5 @@
 
-{-# LANGUAGE RecordWildCards, DeriveDataTypeable #-}
+{-# LANGUAGE RecordWildCards, DeriveDataTypeable, TypeFamilies #-}
 
 module Main where
 
@@ -9,6 +9,7 @@ import Data.Tree
 import Data.Maybe
 import Strategy (serverChoice, serverStrat, Game(..), Strategy(..), Points(..), choices)
 import Control.Monad
+import Data.Monoid
 
 data Params = Params {count::Int, clientSkip::Bool, serverSkip::Bool, treeSkip::Bool }
   deriving (Data,Typeable,Show,Eq)
@@ -24,6 +25,8 @@ params = Params {
 data Prison = Break | Keep deriving (Show, Eq, Ord, Enum, Bounded)
 
 instance Game Prison where
+  type Interest Prison = Sum Integer
+
   game Break Break = Points   0   0
   game Break Keep  = Points   2 (-1)
   game Keep  Break = Points (-1)  2
@@ -44,8 +47,8 @@ main = do
   let strat@Strategy{..} = serverChoice count
   putStr "count is "
   print count
-  labelledOut "server gains " $ show $ server points
-  labelledOut "client gains " $ show $ client points
+  labelledOut "server gains " $ show $ getSum $ server points
+  labelledOut "client gains " $ show $ getSum $ client points
   unless clientSkip $ labelledOut "client strategy: " $ showStrat clientStrat
   unless serverSkip $ labelledOut "server strategy: " $ showStrat $ serverStrat strat
   unless treeSkip   $ labelledOut "server strategy tree:\n" $ drawStrat strat

@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, TypeFamilies, FlexibleContexts #-}
 
 module Strategy where
 
@@ -10,19 +10,21 @@ import Data.Function
 import Data.Ord
 import Control.Monad
 
-class Ord a=>Game a where
-  game::a->a->Points
+class (Ord a, Ord (Interest a), Monoid (Interest a))=>Game a where
+  type Interest a
+  game::a->a->Points (Interest a)
   choices::[a]
   mkChoicer::[b]->a->b
 
-data Points = Points {
-  server::Integer,
-  client::Integer
-} deriving (Show, Eq, Ord)
+data Points c = Points {
+  server::c,
+  client::c
+} deriving (Eq, Show, Ord)
+
 
 data Strategy c = Strategy {
   choice     ::c,
-  points     ::Points,
+  points     ::Points (Interest c),
   subStrat   ::SubStrategy c,
   clientStrat::[c]
 }
@@ -34,26 +36,25 @@ consider =  ((All.).). on (==)
 
 equalParts = ((getAll .) .)
 
-instance Eq c => Eq (Strategy c) where
+instance Game c => Eq (Strategy c) where
   (==) = equalParts $
-    consider (client. points) <>
-    consider (server. points) <>
+    consider points <>
     consider choice
 
 serverStrat Strategy{..} = choice: maybe [] serverStrat (subStrat (head clientStrat) )
 
-clientCompare, serverCompare :: Points -> Points -> Ordering
+clientCompare, serverCompare ::Ord a => Points a-> Points a-> Ordering
 clientCompare = comparing client <> comparing (Down . server)
 serverCompare = comparing server <> comparing (Down . client)
 
-instance Ord c => Ord (Strategy c) where
+instance Game c => Ord (Strategy c) where
   compare =  comparing (client . points) <>
              comparing (server . points) <>
              comparing choice
 
-instance Monoid Points where
-  mempty = Points 0 0
-  (Points c1 s1) `mappend` (Points c2 s2) = Points (c1 + c2) (s1 + s2)
+instance Monoid c=>Monoid (Points c) where
+  mempty = Points mempty mempty
+  (Points c1 s1) `mappend` (Points c2 s2) = Points (c1 <> c2) (s1 <> s2)
 
 values::(Enum a, Bounded a)=>[a]
 values= [minBound..maxBound]
