@@ -27,25 +27,20 @@ prison Break Keep  = Points   2 (-1)
 prison Keep  Break = Points (-1)  2
 prison Keep  Keep  = Points   1   1
 
+labelledOut::String->String->IO ()
+labelledOut label val = putStr label >> putStrLn val
+
 main :: IO ()
 main = do
   Params{..} <- cmdArgs params
   let strat@Strategy{..} = serverChoice prison count
   putStr "count is "
   print count
-  putStr "server gains "
-  print $ server points
-  putStr "client gains "
-  print $ client points
-  unless clientSkip $ do
-    putStr "client strategy: "
-    putStrLn $ showStrat clientStrat
-  unless serverSkip $ do
-    putStr "server strategy: "
-    putStrLn $ showStrat $ serverStrat strat
-  unless treeSkip $ do
-    putStrLn "server strategy tree:"
-    putStr $ drawStrat strat
+  labelledOut "server gains " $ show $ server points
+  labelledOut "client gains " $ show $ client points
+  unless clientSkip $ labelledOut "client strategy: " $ showStrat clientStrat
+  unless serverSkip $ labelledOut "server strategy: " $ showStrat $ serverStrat strat
+  unless treeSkip   $ labelledOut "server strategy tree:\n" $ drawStrat strat
 
 showStrat::[Choice]->String
 showStrat = intercalate " -> " . map show
