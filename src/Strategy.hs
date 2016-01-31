@@ -26,8 +26,6 @@ data Strategy = Strategy {
   clientStrat::[Choice]
 } deriving Show
 
-with = (.) . (.)
-
 instance Eq Strategy where
   (==) = ((== EQ) .)  . compare
 
@@ -52,33 +50,27 @@ strategy
   game = let
     keepPoints   = game choice Keep  <> maybe mempty points keepStrat
     breakPoints  = game choice Break <> maybe mempty points breakStrat
-    (cliCh, maybe [] clientStrat -> history, pts) =
+    (clientChoice, maybe [] clientStrat -> history, pts) =
       case clientCompare keepPoints breakPoints of
-        GT -> (Keep,  keepStrat,  keepPoints)
+        GT -> (Keep , keepStrat , keepPoints )
         _  -> (Break, breakStrat, breakPoints)
-    in Strategy{points = pts, clientStrat = cliCh : history, ..}
-
+    in Strategy{points = pts, clientStrat = clientChoice : history, ..}
 
 initial :: Game -> Set Strategy
 initial game = Set.fromList [start Keep, start Break] where
-  start = flip (strategy Nothing Nothing) game
-
-levels::(Enum a, Bounded a)=>[a]
-levels = [minBound..maxBound]
+  start choice = strategy Nothing Nothing choice game
 
 next :: Game -> Set Strategy -> Set Strategy
 next game set = Set.fromList $ do
-  keep <- toList set
-  break <- toList set
-  choice <- [minBound..maxBound]
+  keep   <- toList set
+  break  <- toList set
+  choice <- [Break, Keep]
   return $ strategy (Just keep) (Just break) choice game
 
 serverChoice :: Game -> Int -> Strategy
 serverChoice game count = let
-  ini = initial game
-  nxt = next game
-  ops = replicate (count - 1) $ Endo nxt
-  run = foldr1 mappend ops
-  res = appEndo run ini
+  ops = replicate (count - 1) (next game)
+  run = foldMap Endo ops
+  res = appEndo run (initial game)
   cmp = serverCompare `on` points
   in maximumBy cmp res
