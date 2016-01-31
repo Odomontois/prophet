@@ -59,7 +59,8 @@ executable prophet
   -- Other library packages from which modules are imported.
   build-depends:       base >=4.8 && <4.9,
                        array >=0.5 && <0.6,
-                       containers >= 0.5
+                       containers >= 0.5,
+                       cmdargs >= 0.10
 
   -- Directories containing source files.
   hs-source-dirs:      src
