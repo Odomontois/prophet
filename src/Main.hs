@@ -7,7 +7,7 @@ import System.Console.CmdArgs
 import Data.List
 import Data.Tree
 import Data.Maybe
-import Strategy
+import Strategy (serverChoice, serverStrat, Game(..), Strategy(..), Points(..), choices)
 import Control.Monad
 
 data Params = Params {count::Int, clientSkip::Bool, serverSkip::Bool, treeSkip::Bool }
@@ -21,11 +21,19 @@ params = Params {
   treeSkip   = False &= help "skip tree output"
 }
 
-prison::Game
-prison Break Break = Points   0   0
-prison Break Keep  = Points   2 (-1)
-prison Keep  Break = Points (-1)  2
-prison Keep  Keep  = Points   1   1
+data Prison = Break | Keep deriving (Show, Eq, Ord, Enum, Bounded)
+
+instance Game Prison where
+  game Break Break = Points   0   0
+  game Break Keep  = Points   2 (-1)
+  game Keep  Break = Points (-1)  2
+  game Keep  Keep  = Points   1   1
+
+  choices = [Break, Keep]
+
+  mkChoicer [keep, break] = choose where
+    choose Keep  = keep
+    choose Break = break
 
 labelledOut::String->String->IO ()
 labelledOut label val = putStr label >> putStrLn val
@@ -33,7 +41,7 @@ labelledOut label val = putStr label >> putStrLn val
 main :: IO ()
 main = do
   Params{..} <- cmdArgs params
-  let strat@Strategy{..} = serverChoice prison count
+  let strat@Strategy{..} = serverChoice count
   putStr "count is "
   print count
   labelledOut "server gains " $ show $ server points
@@ -42,7 +50,7 @@ main = do
   unless serverSkip $ labelledOut "server strategy: " $ showStrat $ serverStrat strat
   unless treeSkip   $ labelledOut "server strategy tree:\n" $ drawStrat strat
 
-showStrat::[Choice]->String
+showStrat::Show a=>[a]->String
 showStrat = intercalate " -> " . map show
 
 drawStrat = drawTree . go "at first" where

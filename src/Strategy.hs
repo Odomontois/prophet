@@ -8,25 +8,37 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Function
 import Data.Ord
+import Control.Monad
 
-data Choice = Break | Keep deriving (Show, Eq, Ord, Enum, Bounded)
-
-type Game = Choice -> Choice -> Points
+class Ord a=>Game a where
+  game::a->a->Points
+  choices::[a]
+  mkChoicer::[b]->a->b
 
 data Points = Points {
   server::Integer,
   client::Integer
 } deriving (Show, Eq, Ord)
 
-data Strategy = Strategy {
-  choice::Choice,
-  points::Points,
-  subStrat::Choice->Maybe Strategy,
-  clientStrat::[Choice]
+data Strategy c = Strategy {
+  choice     ::c,
+  points     ::Points,
+  subStrat   ::SubStrategy c,
+  clientStrat::[c]
 }
 
-instance Eq Strategy where
-  (==) = ((== EQ) .)  . compare
+type SubStrategy c = c-> Maybe (Strategy c)
+
+consider::Eq b=>(a->b)->a->a->All
+consider =  ((All.).). on (==)
+
+equalParts = ((getAll .) .)
+
+instance Eq c => Eq (Strategy c) where
+  (==) = equalParts $
+    consider (client. points) <>
+    consider (server. points) <>
+    consider choice
 
 serverStrat Strategy{..} = choice: maybe [] serverStrat (subStrat (head clientStrat) )
 
@@ -34,7 +46,7 @@ clientCompare, serverCompare :: Points -> Points -> Ordering
 clientCompare = comparing client <> comparing (Down . server)
 serverCompare = comparing server <> comparing (Down . client)
 
-instance Ord Strategy where
+instance Ord c => Ord (Strategy c) where
   compare =  comparing (client . points) <>
              comparing (server . points) <>
              comparing choice
@@ -46,30 +58,29 @@ instance Monoid Points where
 values::(Enum a, Bounded a)=>[a]
 values= [minBound..maxBound]
 
-strategy::(Choice -> Maybe Strategy)->Choice->Game->Strategy
-strategy subStrat choice game = let
+strategy::Game c=>SubStrategy c->c->Strategy c
+strategy subStrat choice = let
     subPoints    = game choice <> maybe mempty points . subStrat
-    clientChoice = maximumBy (clientCompare `on` subPoints) values
+    clientChoice = maximumBy (clientCompare `on` subPoints) choices
     history      = maybe [] clientStrat $ subStrat clientChoice
     in Strategy{points = subPoints clientChoice, clientStrat = clientChoice : history, ..}
 
-initial :: Game -> Set Strategy
-initial game = Set.fromList [start Keep, start Break] where
-  start choice = strategy (const Nothing) choice game
+initial :: Game c=>Set (Strategy c)
+initial = Set.fromList $ map start choices where
+  start = strategy (const Nothing)
 
-next :: Game -> Set Strategy -> Set Strategy
-next game set = Set.fromList $ do
-  keep   <- toList set
-  break  <- toList set
-  let sub Keep  = keep
-      sub Break = break
-  choice <- values
-  return $ strategy (Just. sub) choice game
+next::Game c=>Set (Strategy c) -> Set (Strategy c)
+next set = Set.fromList $ do
+  let cs = choices
+  subs   <- replicateM (length cs) $ toList set
+  choice <- cs
+  let sub = Just . mkChoicer subs
+  return $ strategy sub choice
 
-serverChoice :: Game -> Int -> Strategy
-serverChoice game count = let
-  ops = replicate (count - 1) (next game)
+serverChoice::Game c=>Int->Strategy c
+serverChoice count = let
+  ops = replicate (count - 1) next
   run = foldMap Endo ops
-  res = appEndo run (initial game)
+  res = appEndo run initial
   cmp = serverCompare `on` points
   in maximumBy cmp res
