@@ -45,6 +45,6 @@ main = do
 
 drawStrat = drawTree . go "at first" where
   go prefix Strategy{..} = Node (prefix ++ ": " ++ show choice) $ catMaybes [
-      go "if client keeping"   <$> keepStrat,
-      go "if client breaking"  <$> breakStrat
+      go "if client keeping"   <$> subStrat Keep,
+      go "if client breaking"  <$> subStrat Break
     ]

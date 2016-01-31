@@ -21,10 +21,9 @@ data Points = Points {
 data Strategy = Strategy {
   choice::Choice,
   points::Points,
-  keepStrat::Maybe Strategy,
-  breakStrat::Maybe Strategy,
+  subStrat::Choice->Maybe Strategy,
   clientStrat::[Choice]
-} deriving Show
+}
 
 instance Eq Strategy where
   (==) = ((== EQ) .)  . compare
@@ -42,30 +41,27 @@ instance Monoid Points where
   mempty = Points 0 0
   (Points c1 s1) `mappend` (Points c2 s2) = Points (c1 + c2) (s1 + s2)
 
-strategy::Maybe Strategy->Maybe Strategy->Choice->Game->Strategy
-strategy
-  keepStrat
-  breakStrat
-  choice
-  game = let
-    keepPoints   = game choice Keep  <> maybe mempty points keepStrat
-    breakPoints  = game choice Break <> maybe mempty points breakStrat
+strategy::(Choice -> Maybe Strategy)->Choice->Game->Strategy
+strategy subStrat choice game = let
+    subPoints  chc = game choice chc  <> maybe mempty points (subStrat chc)
     (clientChoice, maybe [] clientStrat -> history, pts) =
-      case clientCompare keepPoints breakPoints of
-        GT -> (Keep , keepStrat , keepPoints )
-        _  -> (Break, breakStrat, breakPoints)
+      case clientCompare (subPoints Keep) (subPoints Break) of
+        GT -> (Keep , subStrat Keep, subPoints Keep)
+        _  -> (Break, subStrat Break,subPoints Break)
     in Strategy{points = pts, clientStrat = clientChoice : history, ..}
 
 initial :: Game -> Set Strategy
 initial game = Set.fromList [start Keep, start Break] where
-  start choice = strategy Nothing Nothing choice game
+  start choice = strategy (const Nothing) choice game
 
 next :: Game -> Set Strategy -> Set Strategy
 next game set = Set.fromList $ do
   keep   <- toList set
   break  <- toList set
+  let sub Keep  = keep
+      sub Break = break
   choice <- [Break, Keep]
-  return $ strategy (Just keep) (Just break) choice game
+  return $ strategy (Just. sub) choice game
 
 serverChoice :: Game -> Int -> Strategy
 serverChoice game count = let
