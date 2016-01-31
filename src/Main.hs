@@ -31,7 +31,7 @@ instance Game Prison where
 
   choices = [Break, Keep]
 
-  mkChoicer [keep, break] = choose where
+  mkChoicer [break, keep] = choose where
     choose Keep  = keep
     choose Break = break
 
