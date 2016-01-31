@@ -63,7 +63,7 @@ next game set = Set.fromList $ do
   break  <- toList set
   let sub Keep  = keep
       sub Break = break
-  choice <- [Break, Keep]
+  choice <- values
   return $ strategy (Just. sub) choice game
 
 serverChoice :: Game -> Int -> Strategy
