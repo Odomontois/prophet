@@ -10,14 +10,15 @@ import Data.Maybe
 import Strategy
 import Control.Monad
 
-data Params = Params {count::Int, clientSkip::Bool, serverSkip::Bool }
+data Params = Params {count::Int, clientSkip::Bool, serverSkip::Bool, treeSkip::Bool }
   deriving (Data,Typeable,Show,Eq)
 
 params::Params
 params = Params {
   count      = 5     &= name "n"  &= help "games count",
   clientSkip = False &= help "skip client strategy output",
-  serverSkip = False &= help "skip server strategy output"
+  serverSkip = False &= help "skip server strategy output",
+  treeSkip   = False &= help "skip tree output"
 }
 
 prison::Game
@@ -38,10 +39,16 @@ main = do
   print $ client points
   unless clientSkip $ do
     putStr "client strategy: "
-    putStrLn $ intercalate " -> " $ map show clientStrat
+    putStrLn $ showStrat clientStrat
   unless serverSkip $ do
-    putStrLn "server strategy:"
+    putStr "server strategy: "
+    putStrLn $ showStrat $ serverStrat strat
+  unless treeSkip $ do
+    putStrLn "server strategy tree:"
     putStr $ drawStrat strat
+
+showStrat::[Choice]->String
+showStrat = intercalate " -> " . map show
 
 drawStrat = drawTree . go "at first" where
   go prefix Strategy{..} = Node (prefix ++ ": " ++ show choice) $ catMaybes [

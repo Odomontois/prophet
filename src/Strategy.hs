@@ -1,4 +1,4 @@
-{-# LANGUAGE ViewPatterns, RecordWildCards #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Strategy where
 
@@ -28,6 +28,8 @@ data Strategy = Strategy {
 instance Eq Strategy where
   (==) = ((== EQ) .)  . compare
 
+serverStrat Strategy{..} = choice: maybe [] serverStrat (subStrat (head clientStrat) )
+
 clientCompare, serverCompare :: Points -> Points -> Ordering
 clientCompare = comparing client <> comparing (Down . server)
 serverCompare = comparing server <> comparing (Down . client)
@@ -41,14 +43,15 @@ instance Monoid Points where
   mempty = Points 0 0
   (Points c1 s1) `mappend` (Points c2 s2) = Points (c1 + c2) (s1 + s2)
 
+values::(Enum a, Bounded a)=>[a]
+values= [minBound..maxBound]
+
 strategy::(Choice -> Maybe Strategy)->Choice->Game->Strategy
 strategy subStrat choice game = let
-    subPoints  chc = game choice chc  <> maybe mempty points (subStrat chc)
-    (clientChoice, maybe [] clientStrat -> history, pts) =
-      case clientCompare (subPoints Keep) (subPoints Break) of
-        GT -> (Keep , subStrat Keep, subPoints Keep)
-        _  -> (Break, subStrat Break,subPoints Break)
-    in Strategy{points = pts, clientStrat = clientChoice : history, ..}
+    subPoints    = game choice <> maybe mempty points . subStrat
+    clientChoice = maximumBy (clientCompare `on` subPoints) values
+    history      = maybe [] clientStrat $ subStrat clientChoice
+    in Strategy{points = subPoints clientChoice, clientStrat = clientChoice : history, ..}
 
 initial :: Game -> Set Strategy
 initial game = Set.fromList [start Keep, start Break] where
