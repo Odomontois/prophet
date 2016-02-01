@@ -7,7 +7,7 @@ import System.Console.CmdArgs
 import Data.List
 import Data.Tree
 import Data.Maybe
-import Strategy (serverChoice, serverStrat, Game(..), Strategy(..), Points(..), choices)
+import Game
 import Control.Monad
 import Data.Monoid
 
